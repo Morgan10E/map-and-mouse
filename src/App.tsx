@@ -6,7 +6,7 @@ import { FilterBar } from './components/FilterBar'
 import { MapView } from './components/MapView'
 import { Sidebar } from './components/Sidebar'
 import { useNeighborhoods } from './hooks/useNeighborhoods'
-import { computeWeightedScore } from './utils/scoring'
+import { useCriteriaData } from './hooks/useCriteriaData'
 import { STATIC_SCORES } from './data/staticScores'
 import { ALL_CRITERIA, type CriterionKey, type Filters, type NeighborhoodFeature } from './types'
 
@@ -38,44 +38,27 @@ export function App() {
   )
   const [filters, setFilters] = useState<Filters>(makeDefaultFilters)
   const [activeFeature, setActiveFeature] = useState<NeighborhoodFeature | null>(null)
-  const [activeScores, setActiveScores] = useState<Partial<Record<CriterionKey, number>>>({})
-  const [scoresLoading, setScoresLoading] = useState(false)
+  const [placesService, setPlacesService] = useState<google.maps.places.PlacesService | null>(null)
 
   const { neighborhoods } = useNeighborhoods()
+  const { criteriaData, poiCounts } = useCriteriaData(placesService, neighborhoods)
 
   const handleFilterChange = useCallback((criterion: CriterionKey, checked: boolean) => {
     setFilters(prev => ({ ...prev, [criterion]: checked }))
   }, [])
 
-  const handleNeighborhoodSelect = useCallback(
-    (feature: NeighborhoodFeature, scores: Partial<Record<CriterionKey, number>>) => {
-      setActiveFeature(feature)
-      setActiveScores(scores)
-      setScoresLoading(true)
-    },
-    [],
-  )
-
-  const handleScoresReady = useCallback(
-    (id: string, scores: Partial<Record<CriterionKey, number>>) => {
-      if (activeFeature?.properties.id === id) {
-        setActiveScores(scores)
-        setScoresLoading(false)
-      }
-    },
-    [activeFeature],
-  )
-
-  const totalScore = activeFeature
-    ? computeWeightedScore(
-        activeFeature
-          ? { ...STATIC_SCORES[activeFeature.properties.id], ...activeScores }
-          : activeScores,
-        filters,
-      )
-    : null
+  const handleNeighborhoodSelect = useCallback((feature: NeighborhoodFeature) => {
+    setActiveFeature(feature)
+  }, [])
 
   const showApiKeyBanner = !apiKey
+
+  const activeCounts = activeFeature
+    ? { ...poiCounts[activeFeature.properties.id] }
+    : {}
+  const activeStaticScores = activeFeature
+    ? STATIC_SCORES[activeFeature.properties.id] ?? {}
+    : {}
 
   return (
     <>
@@ -89,16 +72,16 @@ export function App() {
             apiKey={apiKey}
             filters={filters}
             activeNeighborhoodId={activeFeature?.properties.id ?? null}
+            criteriaData={criteriaData}
             onNeighborhoodSelect={handleNeighborhoodSelect}
-            onScoresReady={handleScoresReady}
+            onMapReady={setPlacesService}
           />
           {activeFeature && (
             <Sidebar
               name={activeFeature.properties.name}
-              totalScore={scoresLoading ? null : totalScore}
-              scores={activeScores}
+              poiCounts={activeCounts}
+              staticScores={activeStaticScores}
               filters={filters}
-              loading={scoresLoading}
               onClose={() => setActiveFeature(null)}
             />
           )}

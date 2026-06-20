@@ -1,31 +1,49 @@
 import styled from 'styled-components'
-import { ALL_CRITERIA, CRITERION_LABELS, type CriterionKey, type Filters } from '../types'
+import { CRITERION_LABELS, type CriterionKey, type Filters } from '../types'
+import { CRITERION_GROUPS, OVERLAY_CONFIG } from '../data/overlayConfig'
 
 const Bar = styled.section`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  padding: 0.6rem 1.5rem;
+  gap: 0.25rem 0.75rem;
+  padding: 0.5rem 1.25rem;
   background: #f4f4f4;
   border-bottom: 1px solid #ddd;
   align-items: center;
   flex-shrink: 0;
 `
 
+const GroupBlock = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  flex-wrap: wrap;
+`
+
+const GroupSep = styled.span`
+  width: 1px;
+  height: 1.2rem;
+  background: #ccc;
+  align-self: center;
+  flex-shrink: 0;
+`
+
 const Label = styled.label`
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.82rem;
+  gap: 0.3rem;
+  font-size: 0.8rem;
   cursor: pointer;
   user-select: none;
 `
 
-const Caption = styled.span`
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #555;
-  margin-right: 0.5rem;
+const Swatch = styled.span<{ $color: string }>`
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: ${p => p.$color};
+  flex-shrink: 0;
 `
 
 interface Props {
@@ -36,16 +54,23 @@ interface Props {
 export function FilterBar({ filters, onFilterChange }: Props) {
   return (
     <Bar>
-      <Caption>Show:</Caption>
-      {ALL_CRITERIA.map(key => (
-        <Label key={key}>
-          <input
-            type="checkbox"
-            checked={filters[key]}
-            onChange={e => onFilterChange(key, e.target.checked)}
-          />
-          {CRITERION_LABELS[key]}
-        </Label>
+      {CRITERION_GROUPS.map((group, i) => (
+        <>
+          {i > 0 && <GroupSep key={`sep-${group.label}`} />}
+          <GroupBlock key={group.label}>
+            {group.keys.map(key => (
+              <Label key={key}>
+                <input
+                  type="checkbox"
+                  checked={filters[key]}
+                  onChange={e => onFilterChange(key, e.target.checked)}
+                />
+                <Swatch $color={OVERLAY_CONFIG[key]?.color ?? '#888'} />
+                {CRITERION_LABELS[key]}
+              </Label>
+            ))}
+          </GroupBlock>
+        </>
       ))}
     </Bar>
   )

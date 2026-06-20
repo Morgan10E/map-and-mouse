@@ -1,5 +1,6 @@
 export type CriterionKey =
   | 'freeway'
+  | 'sewage'
   | 'trees'
   | 'restaurants'
   | 'grocery'
@@ -10,7 +11,6 @@ export type CriterionKey =
   | 'tempMedian'
   | 'tempMax'
 
-export type Scores = Record<CriterionKey, number>
 export type Filters = Record<CriterionKey, boolean>
 
 export interface NeighborhoodProperties {
@@ -24,37 +24,34 @@ export type NeighborhoodFeature = GeoJSON.Feature<
   NeighborhoodProperties
 >
 
-export interface LiveScores {
-  restaurants: number
-  grocery: number
-  gym: number
-}
-
 export const ALL_CRITERIA: CriterionKey[] = [
-  'freeway',
-  'trees',
+  'transit',
+  'park',
   'restaurants',
   'grocery',
   'gym',
-  'park',
-  'transit',
+  'freeway',
+  'sewage',
+  'trees',
   'tempMean',
   'tempMedian',
   'tempMax',
 ]
 
 export const CRITERION_LABELS: Record<CriterionKey, string> = {
-  freeway: 'No freeway/sewage',
-  trees: 'Trees + walkability',
+  transit: 'Transit access',
+  park: 'Parks',
   restaurants: 'Restaurants',
-  grocery: 'Grocery access',
+  grocery: 'Groceries',
   gym: 'Gym / pool',
-  park: 'Parks nearby',
-  transit: 'Transit',
+  freeway: 'Far from freeway',
+  sewage: 'Far from smell sources',
+  trees: 'Tree coverage',
   tempMean: 'Mean temp (°F)',
   tempMedian: 'Median temp (°F)',
   tempMax: 'Max temp (°F)',
 }
 
-// Temperature criteria store raw °F values; excluded from weighted score
 export const TEMP_CRITERIA = new Set<CriterionKey>(['tempMean', 'tempMedian', 'tempMax'])
+export const HEATMAP_CRITERIA = new Set<CriterionKey>(['trees', 'tempMean', 'tempMedian', 'tempMax'])
+export const REPELLANT_CRITERIA = new Set<CriterionKey>(['freeway', 'sewage'])
