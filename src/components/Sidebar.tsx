@@ -1,7 +1,6 @@
 import styled from 'styled-components'
-import { ScoreBar } from './ScoreBar'
-import { scoreToColor } from '../utils/scoring'
-import { ALL_CRITERIA, CRITERION_LABELS, TEMP_CRITERIA, type CriterionKey, type Filters } from '../types'
+import { CRITERION_LABELS, HEATMAP_CRITERIA, REPELLANT_CRITERIA, TEMP_CRITERIA, type CriterionKey, type Filters } from '../types'
+import { CRITERION_GROUPS, OVERLAY_CONFIG } from '../data/overlayConfig'
 
 const Panel = styled.aside`
   width: 300px;
@@ -41,64 +40,78 @@ const CloseButton = styled.button`
   }
 `
 
-const ScoreTotal = styled.div<{ $color: string }>`
-  padding: 0.75rem 1.25rem;
-  font-size: 2.25rem;
-  font-weight: 800;
-  color: ${p => p.$color};
-  border-bottom: 1px solid #eee;
-`
-
-const ScoreLabel = styled.span`
-  font-size: 0.75rem;
-  font-weight: 400;
-  color: #888;
-  margin-left: 0.25rem;
-`
-
-const List = styled.ul`
-  list-style: none;
+const Group = styled.div`
   padding: 0.5rem 0;
+  border-bottom: 1px solid #f0f0f0;
+
+  &:last-child {
+    border-bottom: none;
+  }
 `
 
-const Row = styled.li<{ $dimmed: boolean }>`
-  padding: 0.5rem 1.25rem;
+const GroupLabel = styled.div`
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #aaa;
+  padding: 0.5rem 1.25rem 0.25rem;
+`
+
+const Row = styled.div<{ $dimmed: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 1.25rem;
   opacity: ${p => p.$dimmed ? 0.35 : 1};
   transition: opacity 0.2s;
 `
 
-const RowTop = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+const Swatch = styled.span<{ $color: string }>`
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: ${p => p.$color};
+  flex-shrink: 0;
 `
 
 const CriterionName = styled.span`
   font-size: 0.82rem;
+  flex: 1;
 `
 
-const CriterionScore = styled.span`
+const CriterionValue = styled.span`
   font-size: 0.82rem;
   font-weight: 600;
   color: #555;
-`
-
-const LoadingMsg = styled.p`
-  padding: 2rem 1.25rem;
-  color: #888;
-  font-size: 0.85rem;
+  white-space: nowrap;
 `
 
 interface Props {
   name: string
-  totalScore: number | null
-  scores: Partial<Record<CriterionKey, number>>
+  poiCounts: Partial<Record<CriterionKey, number>>
+  staticScores: Partial<Record<CriterionKey, number>>
   filters: Filters
-  loading: boolean
   onClose: () => void
 }
 
-export function Sidebar({ name, totalScore, scores, filters, loading, onClose }: Props) {
+function formatValue(
+  key: CriterionKey,
+  poiCounts: Partial<Record<CriterionKey, number>>,
+  staticScores: Partial<Record<CriterionKey, number>>,
+): string {
+  if (REPELLANT_CRITERIA.has(key)) return 'overlay active'
+  if (HEATMAP_CRITERIA.has(key)) {
+    const val = staticScores[key]
+    if (val == null) return '—'
+    return TEMP_CRITERIA.has(key) ? `${val}°F` : String(val)
+  }
+  const count = poiCounts[key]
+  if (count == null) return 'loading…'
+  return `${count} found`
+}
+
+export function Sidebar({ name, poiCounts, staticScores, filters, onClose }: Props) {
   return (
     <Panel>
       <PanelHeader>
@@ -106,35 +119,23 @@ export function Sidebar({ name, totalScore, scores, filters, loading, onClose }:
         <CloseButton onClick={onClose} aria-label="Close">✕</CloseButton>
       </PanelHeader>
 
-      {loading || totalScore === null ? (
-        <LoadingMsg>Loading live data…</LoadingMsg>
-      ) : (
-        <>
-          <ScoreTotal $color={scoreToColor(totalScore)}>
-            {totalScore}
-            <ScoreLabel>/ 100</ScoreLabel>
-          </ScoreTotal>
-          <List>
-            {ALL_CRITERIA.map(key => {
-              const val = scores[key] ?? 0
-              const active = filters[key]
-              const isTemp = TEMP_CRITERIA.has(key)
-              const displayVal = active
-                ? isTemp ? `${val}°F` : val
-                : '—'
-              return (
-                <Row key={key} $dimmed={!active}>
-                  <RowTop>
-                    <CriterionName>{CRITERION_LABELS[key]}</CriterionName>
-                    <CriterionScore>{displayVal}</CriterionScore>
-                  </RowTop>
-                  {!isTemp && <ScoreBar score={active ? val : 0} />}
-                </Row>
-              )
-            })}
-          </List>
-        </>
-      )}
+      {CRITERION_GROUPS.map(group => (
+        <Group key={group.label}>
+          <GroupLabel>{group.label}</GroupLabel>
+          {group.keys.map(key => {
+            const color = OVERLAY_CONFIG[key]?.color ?? '#888'
+            const active = filters[key]
+            const value = active ? formatValue(key, poiCounts, staticScores) : '—'
+            return (
+              <Row key={key} $dimmed={!active}>
+                <Swatch $color={color} />
+                <CriterionName>{CRITERION_LABELS[key]}</CriterionName>
+                <CriterionValue>{value}</CriterionValue>
+              </Row>
+            )
+          })}
+        </Group>
+      ))}
     </Panel>
   )
 }
