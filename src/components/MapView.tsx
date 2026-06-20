@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import styled from 'styled-components'
+import simpleheat from 'simpleheat'
 import { useNeighborhoods } from '../hooks/useNeighborhoods'
 import { geojsonCoordsToLatLng, getPolygonCenter } from '../utils/geojson'
 import { STATIC_SCORES } from '../data/staticScores'
@@ -9,20 +10,8 @@ import { HEATMAP_CRITERIA, TEMP_CRITERIA } from '../types'
 import type { CriterionKey, Filters, NeighborhoodFeature } from '../types'
 import type { CriteriaData } from '../hooks/useCriteriaData'
 
-// Temperature 50–80°F: cool blue → warm red
-function heatmapTempColor(tempF: number): string {
-  const t = Math.max(0, Math.min(1, (tempF - 50) / 30))
-  const r = Math.round(t * 220)
-  const b = Math.round((1 - t) * 220)
-  return `rgb(${r},50,${b})`
-}
-
-// Tree score 0–100: sparse brown → dense green
-function heatmapTreeColor(score: number): string {
-  const t = Math.max(0, Math.min(1, score / 100))
-  const g = Math.round(80 + t * 130)
-  return `rgb(20,${g},20)`
-}
+const TREE_GRADIENT  = { '0.0': 'rgba(0,60,0,0)',   '0.5': 'rgba(60,200,60,0.9)', '1.0': 'rgba(0,120,0,1)' }
+const TEMP_GRADIENT  = { '0.0': 'rgba(0,60,255,0)', '0.4': 'rgba(0,140,255,0.9)', '0.75': 'rgba(255,220,0,1)', '1.0': 'rgba(255,30,0,1)' }
 
 const MapContainer = styled.div`
   flex: 1;
@@ -76,6 +65,7 @@ export function MapView({
   const mapRef = useRef<google.maps.Map | null>(null)
   const polygonsRef = useRef<Map<string, google.maps.Polygon>>(new Map())
   const circleLayersRef = useRef<Map<CriterionKey, google.maps.Circle[]>>(new Map())
+  const heatmapOverlaysRef = useRef<Map<CriterionKey, google.maps.OverlayView>>(new Map())
   const createdNbCountRef = useRef(0)
   const mapsLoadedRef = useRef(false)
   const onNeighborhoodSelectRef = useRef(onNeighborhoodSelect)
@@ -257,27 +247,75 @@ export function MapView({
       ),
     )
 
-    // Heatmap criteria: one large colored circle per neighborhood centroid.
-    // HeatmapLayer was removed from Maps JS API v3.65, so we approximate with circles.
+    // Heatmap criteria: canvas-based smooth gradient using simpleheat + OverlayView.
+    // HeatmapLayer was removed from Maps JS API v3.65.
+    class HeatmapOverlay extends google.maps.OverlayView {
+      private _canvas: HTMLCanvasElement | null = null
+      private _heat: ReturnType<typeof simpleheat> | null = null
+
+      constructor(
+        private readonly _pts: Array<[number, number, number]>,
+        private readonly _gradient: Record<string, string>,
+      ) { super() }
+
+      onAdd() {
+        const c = document.createElement('canvas')
+        c.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none'
+        this.getPanes()!.overlayLayer.appendChild(c)
+        this._canvas = c
+        this._heat = simpleheat(c)
+        this._heat.gradient(this._gradient)
+      }
+
+      draw() {
+        const m = this.getMap() as google.maps.Map
+        const proj = this.getProjection()
+        if (!m || !proj || !this._canvas || !this._heat) return
+
+        const div = (m as unknown as { getDiv(): HTMLElement }).getDiv()
+        const w = div.offsetWidth
+        const h = div.offsetHeight
+        this._canvas.width = w
+        this._canvas.height = h
+
+        const r = Math.round(Math.min(w, h) * 0.22)
+        this._heat.radius(r, r * 0.55)
+
+        const pts = this._pts.map(([lat, lng, wt]) => {
+          const p = proj.fromLatLngToDivPixel(new google.maps.LatLng(lat, lng))!
+          return [p.x, p.y, wt] as [number, number, number]
+        })
+        this._heat.data(pts).max(1).draw(0.03)
+      }
+
+      onRemove() {
+        this._canvas?.remove()
+        this._canvas = null
+        this._heat = null
+      }
+    }
+
     for (const criterion of HEATMAP_CRITERIA) {
-      const circles = neighborhoods.flatMap(nb => {
+      const gradient = TEMP_CRITERIA.has(criterion) ? TEMP_GRADIENT : TREE_GRADIENT
+
+      const vals = neighborhoods
+        .map(nb => STATIC_SCORES[nb.properties.id]?.[criterion] ?? null)
+        .filter((v): v is number => v !== null)
+      if (vals.length === 0) continue
+
+      const lo = Math.min(...vals)
+      const hi = Math.max(...vals)
+      const range = hi - lo || 1
+
+      const pts: Array<[number, number, number]> = neighborhoods.flatMap(nb => {
         const val = STATIC_SCORES[nb.properties.id]?.[criterion]
         if (val == null) return []
-        const center = getPolygonCenter(nb.geometry)
-        const fillColor = TEMP_CRITERIA.has(criterion)
-          ? heatmapTempColor(val)
-          : heatmapTreeColor(val)
-        return [new google.maps.Circle({
-          center,
-          radius: 1600,
-          strokeWeight: 0,
-          fillColor,
-          fillOpacity: 0.38,
-          map: null,
-          clickable: false,
-        })]
+        const c = getPolygonCenter(nb.geometry)
+        return [[c.lat, c.lng, (val - lo) / range]]
       })
-      circleLayersRef.current.set(criterion, circles)
+
+      const overlay = new HeatmapOverlay(pts, gradient)
+      heatmapOverlaysRef.current.set(criterion, overlay)
     }
   }, [mapsReady, neighborhoods])
 
@@ -338,6 +376,10 @@ export function MapView({
     circleLayersRef.current.forEach((circles, key) => {
       const visible = filters[key] ?? false
       circles.forEach(c => c.setMap(visible ? map : null))
+    })
+
+    heatmapOverlaysRef.current.forEach((overlay, key) => {
+      overlay.setMap((filters[key] ?? false) ? map : null)
     })
   }, [filters, criteriaData, mapsReady])
 
