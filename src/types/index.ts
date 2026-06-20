@@ -6,7 +6,9 @@ export type CriterionKey =
   | 'gym'
   | 'park'
   | 'transit'
-  | 'weather'
+  | 'tempMean'
+  | 'tempMedian'
+  | 'tempMax'
 
 export type Scores = Record<CriterionKey, number>
 export type Filters = Record<CriterionKey, boolean>
@@ -36,7 +38,9 @@ export const ALL_CRITERIA: CriterionKey[] = [
   'gym',
   'park',
   'transit',
-  'weather',
+  'tempMean',
+  'tempMedian',
+  'tempMax',
 ]
 
 export const CRITERION_LABELS: Record<CriterionKey, string> = {
@@ -47,5 +51,10 @@ export const CRITERION_LABELS: Record<CriterionKey, string> = {
   gym: 'Gym / pool',
   park: 'Parks nearby',
   transit: 'Transit',
-  weather: 'Rain shadow',
+  tempMean: 'Mean temp (°F)',
+  tempMedian: 'Median temp (°F)',
+  tempMax: 'Max temp (°F)',
 }
+
+// Temperature criteria store raw °F values; excluded from weighted score
+export const TEMP_CRITERIA = new Set<CriterionKey>(['tempMean', 'tempMedian', 'tempMax'])

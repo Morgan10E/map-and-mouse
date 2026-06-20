@@ -1,7 +1,7 @@
 import styled from 'styled-components'
 import { ScoreBar } from './ScoreBar'
 import { scoreToColor } from '../utils/scoring'
-import { ALL_CRITERIA, CRITERION_LABELS, type CriterionKey, type Filters } from '../types'
+import { ALL_CRITERIA, CRITERION_LABELS, TEMP_CRITERIA, type CriterionKey, type Filters } from '../types'
 
 const Panel = styled.aside`
   width: 300px;
@@ -118,13 +118,17 @@ export function Sidebar({ name, totalScore, scores, filters, loading, onClose }:
             {ALL_CRITERIA.map(key => {
               const val = scores[key] ?? 0
               const active = filters[key]
+              const isTemp = TEMP_CRITERIA.has(key)
+              const displayVal = active
+                ? isTemp ? `${val}°F` : val
+                : '—'
               return (
                 <Row key={key} $dimmed={!active}>
                   <RowTop>
                     <CriterionName>{CRITERION_LABELS[key]}</CriterionName>
-                    <CriterionScore>{active ? val : '—'}</CriterionScore>
+                    <CriterionScore>{displayVal}</CriterionScore>
                   </RowTop>
-                  <ScoreBar score={active ? val : 0} />
+                  {!isTemp && <ScoreBar score={active ? val : 0} />}
                 </Row>
               )
             })}
