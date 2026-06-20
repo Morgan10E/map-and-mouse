@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import styled from 'styled-components'
 import { useNeighborhoods } from '../hooks/useNeighborhoods'
 import { usePlacesScores } from '../hooks/usePlacesScores'
@@ -21,11 +21,21 @@ const StatusMsg = styled.div`
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background: #f0f0f0;
   color: #555;
   font-size: 0.9rem;
+  gap: 0.5rem;
+  padding: 2rem;
+  text-align: center;
+`
+
+const ErrorDetail = styled.p`
+  font-size: 0.75rem;
+  color: #e74c3c;
+  max-width: 320px;
 `
 
 interface Props {
@@ -48,6 +58,8 @@ export function MapView({
   const polygonsRef = useRef<Map<string, google.maps.Polygon>>(new Map())
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null)
   const mapsLoadedRef = useRef(false)
+  const [mapsError, setMapsError] = useState<string | null>(null)
+  const [mapsReady, setMapsReady] = useState(false)
 
   const { neighborhoods, hoaZones, loading, error } = useNeighborhoods()
   const { getScores } = usePlacesScores(placesServiceRef.current)
@@ -69,12 +81,22 @@ export function MapView({
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${callbackName}&loading=async`
     script.async = true
     script.defer = true
-    script.onerror = () => console.error('Failed to load Google Maps API')
+    script.onerror = () => {
+      setMapsError('Failed to load the Google Maps script. Check your API key and network connection.')
+    }
     document.head.appendChild(script)
 
-    return () => {
-      // cleanup on apiKey change (rare)
-    }
+    // Timeout: if Maps hasn't loaded within 15s, surface an error
+    const timeout = setTimeout(() => {
+      if (!mapsLoadedRef.current) {
+        setMapsError(
+          'Google Maps failed to initialize. Possible causes: API key is invalid, ' +
+          'Maps JavaScript API is not enabled, or the key is restricted to a different domain.',
+        )
+      }
+    }, 15000)
+
+    return () => clearTimeout(timeout)
   }, [apiKey])
 
   // Initialize map once API is ready and neighborhoods are loaded
@@ -90,6 +112,17 @@ export function MapView({
     function initMap() {
       if (!mapElRef.current) return
 
+      try {
+        // Verify Maps loaded without auth errors by checking for expected constructor
+        if (typeof google.maps.Map !== 'function') {
+          setMapsError('Google Maps API loaded but Map constructor is unavailable. Check API key permissions.')
+          return
+        }
+      } catch {
+        setMapsError('Error accessing Google Maps API.')
+        return
+      }
+
       const map = new google.maps.Map(mapElRef.current, {
         center: { lat: 47.620, lng: -122.310 },
         zoom: 13,
@@ -100,6 +133,7 @@ export function MapView({
       })
       mapRef.current = map
       placesServiceRef.current = new google.maps.places.PlacesService(map)
+      setMapsReady(true)
 
       // HOA zones via Data layer
       if (hoaZones.length > 0) {
@@ -192,13 +226,23 @@ export function MapView({
     )
   }
 
+  const showLoading = apiKey && !mapsError && !mapsReady
+
   return (
     <MapContainer>
       <MapEl ref={mapElRef} />
       {!apiKey && (
         <StatusMsg>Enter your Google Maps API key above to load the map.</StatusMsg>
       )}
-      {apiKey && loading && <StatusMsg>Loading neighborhood data…</StatusMsg>}
+      {mapsError && (
+        <StatusMsg>
+          <span>⚠️ Map failed to load</span>
+          <ErrorDetail>{mapsError}</ErrorDetail>
+        </StatusMsg>
+      )}
+      {showLoading && (
+        <StatusMsg>Loading map…</StatusMsg>
+      )}
     </MapContainer>
   )
 }

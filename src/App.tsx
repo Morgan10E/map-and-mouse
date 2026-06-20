@@ -12,19 +12,19 @@ import { ALL_CRITERIA, type CriterionKey, type Filters, type NeighborhoodFeature
 
 const GlobalStyle = createGlobalStyle`
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body, #root { height: 100%; }
   body { font-family: system-ui, -apple-system, sans-serif; }
 `
 
 const AppShell = styled.div`
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 100dvh;
 `
 
 const MainContent = styled.main`
   display: flex;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 `
 
