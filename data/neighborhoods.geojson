@@ -1,0 +1,77 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "capitol-hill",
+        "name": "Capitol Hill",
+        "color": "#4a90d9"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-122.3310, 47.6280],
+          [-122.3150, 47.6280],
+          [-122.3150, 47.6150],
+          [-122.3310, 47.6150],
+          [-122.3310, 47.6280]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "montlake",
+        "name": "Montlake",
+        "color": "#27ae60"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-122.3090, 47.6440],
+          [-122.2970, 47.6440],
+          [-122.2970, 47.6350],
+          [-122.3090, 47.6350],
+          [-122.3090, 47.6440]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "madison-valley",
+        "name": "Madison Valley",
+        "color": "#e67e22"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-122.3070, 47.6250],
+          [-122.2970, 47.6250],
+          [-122.2970, 47.6170],
+          [-122.3070, 47.6170],
+          [-122.3070, 47.6250]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "central-district",
+        "name": "Central District",
+        "color": "#8e44ad"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-122.3050, 47.6100],
+          [-122.2900, 47.6100],
+          [-122.2900, 47.5970],
+          [-122.3050, 47.5970],
+          [-122.3050, 47.6100]
+        ]]
+      }
+    }
+  ]
+}
