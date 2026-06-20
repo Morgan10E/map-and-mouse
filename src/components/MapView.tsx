@@ -9,6 +9,21 @@ import { HEATMAP_CRITERIA, TEMP_CRITERIA } from '../types'
 import type { CriterionKey, Filters, NeighborhoodFeature } from '../types'
 import type { CriteriaData } from '../hooks/useCriteriaData'
 
+// Temperature 50–80°F: cool blue → warm red
+function heatmapTempColor(tempF: number): string {
+  const t = Math.max(0, Math.min(1, (tempF - 50) / 30))
+  const r = Math.round(t * 220)
+  const b = Math.round((1 - t) * 220)
+  return `rgb(${r},50,${b})`
+}
+
+// Tree score 0–100: sparse brown → dense green
+function heatmapTreeColor(score: number): string {
+  const t = Math.max(0, Math.min(1, score / 100))
+  const g = Math.round(80 + t * 130)
+  return `rgb(20,${g},20)`
+}
+
 const MapContainer = styled.div`
   flex: 1;
   position: relative;
@@ -61,8 +76,6 @@ export function MapView({
   const mapRef = useRef<google.maps.Map | null>(null)
   const polygonsRef = useRef<Map<string, google.maps.Polygon>>(new Map())
   const circleLayersRef = useRef<Map<CriterionKey, google.maps.Circle[]>>(new Map())
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const heatmapLayersRef = useRef<Map<CriterionKey, any>>(new Map())
   const createdNbCountRef = useRef(0)
   const mapsLoadedRef = useRef(false)
   const onNeighborhoodSelectRef = useRef(onNeighborhoodSelect)
@@ -75,7 +88,7 @@ export function MapView({
 
   const { neighborhoods, hoaZones, loading, error } = useNeighborhoods()
 
-  // Load Maps JS API with places + visualization libraries
+  // Load Maps JS API
   useEffect(() => {
     if (!apiKey || mapsLoadedRef.current) return
 
@@ -89,7 +102,7 @@ export function MapView({
     }
 
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,visualization&callback=${callbackName}&loading=async`
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${callbackName}&loading=async`
     script.async = true
     script.defer = true
     script.onerror = () => {
@@ -244,27 +257,27 @@ export function MapView({
       ),
     )
 
-    // HeatmapLayer for trees and temperature criteria.
-    // @types/google.maps 3.58+ only stubs visualization types; cast to any for the constructor.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const HeatmapLayerCtor = google.maps.visualization.HeatmapLayer as any
+    // Heatmap criteria: one large colored circle per neighborhood centroid.
+    // HeatmapLayer was removed from Maps JS API v3.65, so we approximate with circles.
     for (const criterion of HEATMAP_CRITERIA) {
-      const points = neighborhoods
-        .map(nb => {
-          const c = getPolygonCenter(nb.geometry)
-          return {
-            location: new google.maps.LatLng(c.lat, c.lng),
-            weight: STATIC_SCORES[nb.properties.id]?.[criterion] ?? 0,
-          }
-        })
-        .filter(p => p.weight > 0)
-
-      const gradient = TEMP_CRITERIA.has(criterion)
-        ? ['rgba(0,0,255,0)', 'rgba(0,128,255,1)', 'rgba(255,255,0,1)', 'rgba(255,128,0,1)', 'rgba(255,0,0,1)']
-        : ['rgba(0,128,0,0)', 'rgba(50,200,50,1)', 'rgba(0,100,0,1)']
-
-      const layer = new HeatmapLayerCtor({ data: points, map: null, radius: 80, opacity: 0.7, gradient })
-      heatmapLayersRef.current.set(criterion, layer)
+      const circles = neighborhoods.flatMap(nb => {
+        const val = STATIC_SCORES[nb.properties.id]?.[criterion]
+        if (val == null) return []
+        const center = getPolygonCenter(nb.geometry)
+        const fillColor = TEMP_CRITERIA.has(criterion)
+          ? heatmapTempColor(val)
+          : heatmapTreeColor(val)
+        return [new google.maps.Circle({
+          center,
+          radius: 1600,
+          strokeWeight: 0,
+          fillColor,
+          fillOpacity: 0.38,
+          map: null,
+          clickable: false,
+        })]
+      })
+      circleLayersRef.current.set(criterion, circles)
     }
   }, [mapsReady, neighborhoods])
 
@@ -325,10 +338,6 @@ export function MapView({
     circleLayersRef.current.forEach((circles, key) => {
       const visible = filters[key] ?? false
       circles.forEach(c => c.setMap(visible ? map : null))
-    })
-
-    heatmapLayersRef.current.forEach((layer, key) => {
-      layer.setMap((filters[key] ?? false) ? map : null)
     })
   }, [filters, criteriaData, mapsReady])
 
