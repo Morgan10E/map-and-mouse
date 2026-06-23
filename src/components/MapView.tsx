@@ -1,17 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import styled from 'styled-components'
-import simpleheat from 'simpleheat'
 import { useNeighborhoods } from '../hooks/useNeighborhoods'
-import { geojsonCoordsToLatLng, getPolygonCenter } from '../utils/geojson'
-import { STATIC_SCORES } from '../data/staticScores'
+import { geojsonCoordsToLatLng } from '../utils/geojson'
 import { FREEWAY_POINTS, SEWAGE_POINTS } from '../data/staticOverlays'
 import { OVERLAY_CONFIG, POI_CRITERIA } from '../data/overlayConfig'
-import { HEATMAP_CRITERIA, TEMP_CRITERIA } from '../types'
 import type { CriterionKey, Filters, NeighborhoodFeature } from '../types'
 import type { CriteriaData } from '../hooks/useCriteriaData'
-
-const TREE_GRADIENT  = { '0.0': 'rgba(0,60,0,0)',   '0.5': 'rgba(60,200,60,0.9)', '1.0': 'rgba(0,120,0,1)' }
-const TEMP_GRADIENT  = { '0.0': 'rgba(0,60,255,0)', '0.4': 'rgba(0,140,255,0.9)', '0.75': 'rgba(255,220,0,1)', '1.0': 'rgba(255,30,0,1)' }
 
 const MapContainer = styled.div`
   flex: 1;
@@ -65,7 +59,6 @@ export function MapView({
   const mapRef = useRef<google.maps.Map | null>(null)
   const polygonsRef = useRef<Map<string, google.maps.Polygon>>(new Map())
   const circleLayersRef = useRef<Map<CriterionKey, google.maps.Circle[]>>(new Map())
-  const heatmapOverlaysRef = useRef<Map<CriterionKey, google.maps.OverlayView>>(new Map())
   const createdNbCountRef = useRef(0)
   const mapsLoadedRef = useRef(false)
   const onNeighborhoodSelectRef = useRef(onNeighborhoodSelect)
@@ -206,12 +199,11 @@ export function MapView({
     })
   }, [activeNeighborhoodId])
 
-  // Create static overlays: repellant circles + heatmap layers (runs once after map ready)
+  // Create static repellant circles (runs once after map ready)
   useEffect(() => {
     const map = mapRef.current
-    if (!mapsReady || !map || neighborhoods.length === 0) return
+    if (!mapsReady || !map) return
 
-    // Freeway repellant circles
     const freewayCfg = OVERLAY_CONFIG.freeway!
     circleLayersRef.current.set(
       'freeway',
@@ -229,7 +221,6 @@ export function MapView({
       ),
     )
 
-    // Sewage repellant circles
     const sewageCfg = OVERLAY_CONFIG.sewage!
     circleLayersRef.current.set(
       'sewage',
@@ -246,86 +237,7 @@ export function MapView({
           }),
       ),
     )
-
-    // Heatmap criteria: canvas-based smooth gradient using simpleheat + OverlayView.
-    // HeatmapLayer was removed from Maps JS API v3.65.
-    class HeatmapOverlay extends google.maps.OverlayView {
-      private _canvas: HTMLCanvasElement | null = null
-      private _heat: ReturnType<typeof simpleheat> | null = null
-
-      constructor(
-        private readonly _pts: Array<[number, number, number]>,
-        private readonly _gradient: Record<string, string>,
-      ) { super() }
-
-      onAdd() {
-        const c = document.createElement('canvas')
-        c.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none'
-        this.getPanes()!.overlayLayer.appendChild(c)
-        this._canvas = c
-        this._heat = simpleheat(c)
-        this._heat.gradient(this._gradient)
-      }
-
-      draw() {
-        const m = this.getMap() as google.maps.Map
-        const proj = this.getProjection()
-        if (!m || !proj || !this._canvas || !this._heat) return
-
-        const bounds = m.getBounds()
-        if (!bounds) return
-        const ne = proj.fromLatLngToDivPixel(bounds.getNorthEast())!
-        const sw = proj.fromLatLngToDivPixel(bounds.getSouthWest())!
-        const left = Math.min(ne.x, sw.x)
-        const top = Math.min(ne.y, sw.y)
-        const w = Math.ceil(Math.abs(ne.x - sw.x))
-        const h = Math.ceil(Math.abs(sw.y - ne.y))
-
-        this._canvas.style.left = `${left}px`
-        this._canvas.style.top = `${top}px`
-        this._canvas.width = w
-        this._canvas.height = h
-
-        const r = Math.round(Math.min(w, h) * 0.22)
-        this._heat.radius(r, r * 0.55)
-
-        const pts = this._pts.map(([lat, lng, wt]) => {
-          const p = proj.fromLatLngToDivPixel(new google.maps.LatLng(lat, lng))!
-          return [p.x - left, p.y - top, wt] as [number, number, number]
-        })
-        this._heat.data(pts).max(1).draw(0.03)
-      }
-
-      onRemove() {
-        this._canvas?.remove()
-        this._canvas = null
-        this._heat = null
-      }
-    }
-
-    for (const criterion of HEATMAP_CRITERIA) {
-      const gradient = TEMP_CRITERIA.has(criterion) ? TEMP_GRADIENT : TREE_GRADIENT
-
-      const vals = neighborhoods
-        .map(nb => STATIC_SCORES[nb.properties.id]?.[criterion] ?? null)
-        .filter((v): v is number => v !== null)
-      if (vals.length === 0) continue
-
-      const lo = Math.min(...vals)
-      const hi = Math.max(...vals)
-      const range = hi - lo || 1
-
-      const pts: Array<[number, number, number]> = neighborhoods.flatMap(nb => {
-        const val = STATIC_SCORES[nb.properties.id]?.[criterion]
-        if (val == null) return []
-        const c = getPolygonCenter(nb.geometry)
-        return [[c.lat, c.lng, (val - lo) / range]]
-      })
-
-      const overlay = new HeatmapOverlay(pts, gradient)
-      heatmapOverlaysRef.current.set(criterion, overlay)
-    }
-  }, [mapsReady, neighborhoods])
+  }, [mapsReady])
 
   // Build POI circles as criteriaData updates (additive per neighborhood batch)
   useEffect(() => {
@@ -376,7 +288,7 @@ export function MapView({
     createdNbCountRef.current = nbCount
   }, [criteriaData, mapsReady])
 
-  // Apply filter visibility to all layers (runs on filter changes and after new circles are created)
+  // Apply filter visibility to all circle layers
   useEffect(() => {
     const map = mapRef.current
     if (!mapsReady || !map) return
@@ -384,10 +296,6 @@ export function MapView({
     circleLayersRef.current.forEach((circles, key) => {
       const visible = filters[key] ?? false
       circles.forEach(c => c.setMap(visible ? map : null))
-    })
-
-    heatmapOverlaysRef.current.forEach((overlay, key) => {
-      overlay.setMap((filters[key] ?? false) ? map : null)
     })
   }, [filters, criteriaData, mapsReady])
 
