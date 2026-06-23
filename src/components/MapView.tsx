@@ -272,9 +272,17 @@ export function MapView({
         const proj = this.getProjection()
         if (!m || !proj || !this._canvas || !this._heat) return
 
-        const div = (m as unknown as { getDiv(): HTMLElement }).getDiv()
-        const w = div.offsetWidth
-        const h = div.offsetHeight
+        const bounds = m.getBounds()
+        if (!bounds) return
+        const ne = proj.fromLatLngToDivPixel(bounds.getNorthEast())!
+        const sw = proj.fromLatLngToDivPixel(bounds.getSouthWest())!
+        const left = Math.min(ne.x, sw.x)
+        const top = Math.min(ne.y, sw.y)
+        const w = Math.ceil(Math.abs(ne.x - sw.x))
+        const h = Math.ceil(Math.abs(sw.y - ne.y))
+
+        this._canvas.style.left = `${left}px`
+        this._canvas.style.top = `${top}px`
         this._canvas.width = w
         this._canvas.height = h
 
@@ -283,7 +291,7 @@ export function MapView({
 
         const pts = this._pts.map(([lat, lng, wt]) => {
           const p = proj.fromLatLngToDivPixel(new google.maps.LatLng(lat, lng))!
-          return [p.x, p.y, wt] as [number, number, number]
+          return [p.x - left, p.y - top, wt] as [number, number, number]
         })
         this._heat.data(pts).max(1).draw(0.03)
       }
