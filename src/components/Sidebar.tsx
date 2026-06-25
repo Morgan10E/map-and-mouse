@@ -1,5 +1,5 @@
 import styled from 'styled-components'
-import { CRITERION_LABELS, HEATMAP_CRITERIA, REPELLANT_CRITERIA, TEMP_CRITERIA, type CriterionKey, type Filters } from '../types'
+import { CRITERION_LABELS, HEATMAP_CRITERIA, REPELLANT_CRITERIA, type CriterionKey, type Filters } from '../types'
 import { CRITERION_GROUPS, OVERLAY_CONFIG } from '../data/overlayConfig'
 
 const Panel = styled.aside`
@@ -90,7 +90,6 @@ const CriterionValue = styled.span`
 interface Props {
   name: string
   poiCounts: Partial<Record<CriterionKey, number>>
-  staticScores: Partial<Record<CriterionKey, number>>
   filters: Filters
   onClose: () => void
 }
@@ -98,20 +97,15 @@ interface Props {
 function formatValue(
   key: CriterionKey,
   poiCounts: Partial<Record<CriterionKey, number>>,
-  staticScores: Partial<Record<CriterionKey, number>>,
 ): string {
   if (REPELLANT_CRITERIA.has(key)) return 'overlay active'
-  if (HEATMAP_CRITERIA.has(key)) {
-    const val = staticScores[key]
-    if (val == null) return '—'
-    return TEMP_CRITERIA.has(key) ? `${val}°F` : String(val)
-  }
+  if (HEATMAP_CRITERIA.has(key)) return 'see map'
   const count = poiCounts[key]
   if (count == null) return 'loading…'
   return `${count} found`
 }
 
-export function Sidebar({ name, poiCounts, staticScores, filters, onClose }: Props) {
+export function Sidebar({ name, poiCounts, filters, onClose }: Props) {
   return (
     <Panel>
       <PanelHeader>
@@ -125,7 +119,7 @@ export function Sidebar({ name, poiCounts, staticScores, filters, onClose }: Pro
           {group.keys.map(key => {
             const color = OVERLAY_CONFIG[key]?.color ?? '#888'
             const active = filters[key]
-            const value = active ? formatValue(key, poiCounts, staticScores) : '—'
+            const value = active ? formatValue(key, poiCounts) : '—'
             return (
               <Row key={key} $dimmed={!active}>
                 <Swatch $color={color} />

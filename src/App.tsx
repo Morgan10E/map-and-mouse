@@ -7,7 +7,7 @@ import { MapView } from './components/MapView'
 import { Sidebar } from './components/Sidebar'
 import { useNeighborhoods } from './hooks/useNeighborhoods'
 import { useCriteriaData } from './hooks/useCriteriaData'
-import { STATIC_SCORES } from './data/staticScores'
+import { useHeatmapData } from './hooks/useHeatmapData'
 import { ALL_CRITERIA, type CriterionKey, type Filters, type NeighborhoodFeature } from './types'
 
 const GlobalStyle = createGlobalStyle`
@@ -42,6 +42,7 @@ export function App() {
 
   const { neighborhoods } = useNeighborhoods()
   const { criteriaData, poiCounts } = useCriteriaData(placesService, neighborhoods)
+  const { treePoints, tempPoints } = useHeatmapData()
 
   const handleFilterChange = useCallback((criterion: CriterionKey, checked: boolean) => {
     setFilters(prev => ({ ...prev, [criterion]: checked }))
@@ -55,9 +56,6 @@ export function App() {
 
   const activeCounts = activeFeature
     ? { ...poiCounts[activeFeature.properties.id] }
-    : {}
-  const activeStaticScores = activeFeature
-    ? STATIC_SCORES[activeFeature.properties.id] ?? {}
     : {}
 
   return (
@@ -73,6 +71,7 @@ export function App() {
             filters={filters}
             activeNeighborhoodId={activeFeature?.properties.id ?? null}
             criteriaData={criteriaData}
+            heatmapData={{ treePoints, tempPoints }}
             onNeighborhoodSelect={handleNeighborhoodSelect}
             onMapReady={setPlacesService}
           />
@@ -80,7 +79,6 @@ export function App() {
             <Sidebar
               name={activeFeature.properties.name}
               poiCounts={activeCounts}
-              staticScores={activeStaticScores}
               filters={filters}
               onClose={() => setActiveFeature(null)}
             />

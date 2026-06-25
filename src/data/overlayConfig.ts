@@ -56,14 +56,32 @@ export const OVERLAY_CONFIG: Partial<Record<CriterionKey, OverlayConfig>> = {
     isRepellant: true,
     searchRadius: 0,
   },
+  trees: {
+    color: '#2e7d32',
+    radius: 0,
+    isRepellant: false,
+    searchRadius: 0,
+  },
+  tempMean: {
+    color: '#e53935',
+    radius: 0,
+    isRepellant: false,
+    searchRadius: 0,
+  },
+  tempMax: {
+    color: '#b71c1c',
+    radius: 0,
+    isRepellant: false,
+    searchRadius: 0,
+  },
 }
 
 export const POI_CRITERIA = (Object.keys(OVERLAY_CONFIG) as CriterionKey[]).filter(
-  k => !OVERLAY_CONFIG[k]!.isRepellant,
+  k => !OVERLAY_CONFIG[k]!.isRepellant && OVERLAY_CONFIG[k]!.searchRadius > 0,
 )
 
 export const CRITERION_GROUPS: { label: string; keys: CriterionKey[] }[] = [
   { label: 'Coverage', keys: ['transit', 'park', 'restaurants', 'grocery', 'gym'] },
   { label: 'Avoid zones', keys: ['freeway', 'sewage'] },
-  { label: 'Heatmaps', keys: ['trees', 'tempMean', 'tempMedian', 'tempMax'] },
+  { label: 'Heatmaps', keys: ['trees', 'tempMean', 'tempMax'] },
 ]

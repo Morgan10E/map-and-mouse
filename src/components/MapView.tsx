@@ -1,11 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
 import styled from 'styled-components'
+import { GoogleMapsOverlay } from '@deck.gl/google-maps'
+import { HeatmapLayer } from '@deck.gl/aggregation-layers'
 import { useNeighborhoods } from '../hooks/useNeighborhoods'
 import { geojsonCoordsToLatLng } from '../utils/geojson'
 import { FREEWAY_POINTS, SEWAGE_POINTS } from '../data/staticOverlays'
 import { OVERLAY_CONFIG, POI_CRITERIA } from '../data/overlayConfig'
+import type { TreePoint, TempPoint } from '../hooks/useHeatmapData'
 import type { CriterionKey, Filters, NeighborhoodFeature } from '../types'
 import type { CriteriaData } from '../hooks/useCriteriaData'
+
+type RGBAColor = [number, number, number, number]
+
+const TREE_COLOR_RANGE: RGBAColor[] = [
+  [200, 230, 201, 0],
+  [165, 214, 167, 60],
+  [102, 187, 106, 140],
+  [56,  142,  60, 190],
+  [27,   94,  32, 230],
+  [1,    50,  32, 255],
+]
+
+const TEMP_COLOR_RANGE: RGBAColor[] = [
+  [187, 222, 251, 0],
+  [100, 181, 246, 60],
+  [30,  136, 229, 140],
+  [255, 193,   7, 190],
+  [239, 108,   0, 230],
+  [183,  28,  28, 255],
+]
 
 const MapContainer = styled.div`
   flex: 1;
@@ -43,6 +66,7 @@ interface Props {
   filters: Filters
   activeNeighborhoodId: string | null
   criteriaData: CriteriaData
+  heatmapData: { treePoints: TreePoint[]; tempPoints: TempPoint[] }
   onNeighborhoodSelect: (feature: NeighborhoodFeature) => void
   onMapReady: (svc: google.maps.places.PlacesService) => void
 }
@@ -52,6 +76,7 @@ export function MapView({
   filters,
   activeNeighborhoodId,
   criteriaData,
+  heatmapData,
   onNeighborhoodSelect,
   onMapReady,
 }: Props) {
@@ -59,6 +84,7 @@ export function MapView({
   const mapRef = useRef<google.maps.Map | null>(null)
   const polygonsRef = useRef<Map<string, google.maps.Polygon>>(new Map())
   const circleLayersRef = useRef<Map<CriterionKey, google.maps.Circle[]>>(new Map())
+  const deckOverlayRef = useRef<GoogleMapsOverlay | null>(null)
   const createdNbCountRef = useRef(0)
   const mapsLoadedRef = useRef(false)
   const onNeighborhoodSelectRef = useRef(onNeighborhoodSelect)
@@ -138,6 +164,10 @@ export function MapView({
       })
       mapRef.current = map
 
+      const overlay = new GoogleMapsOverlay({ layers: [] })
+      overlay.setMap(map)
+      deckOverlayRef.current = overlay
+
       const placesService = new google.maps.places.PlacesService(map)
       onMapReadyRef.current(placesService)
       setMapsReady(true)
@@ -181,6 +211,11 @@ export function MapView({
 
         polygonsRef.current.set(feature.properties.id, poly)
       })
+
+      return () => {
+        overlay.setMap(null)
+        deckOverlayRef.current = null
+      }
     }
 
     return () => clearInterval(waitForMaps)
@@ -255,7 +290,6 @@ export function MapView({
     for (const key of POI_CRITERIA) {
       const config = OVERLAY_CONFIG[key]!
 
-      // Collect all results across all loaded neighborhoods, dedup by place_id
       const seen = new Set<string>()
       const allResults: google.maps.places.PlaceResult[] = []
       for (const nbData of Object.values(criteriaData)) {
@@ -288,7 +322,7 @@ export function MapView({
     createdNbCountRef.current = nbCount
   }, [criteriaData, mapsReady])
 
-  // Apply filter visibility to all circle layers
+  // Apply filter visibility to circle layers
   useEffect(() => {
     const map = mapRef.current
     if (!mapsReady || !map) return
@@ -298,6 +332,67 @@ export function MapView({
       circles.forEach(c => c.setMap(visible ? map : null))
     })
   }, [filters, criteriaData, mapsReady])
+
+  // Update deck.gl heatmap layers when filters or data change
+  useEffect(() => {
+    const overlay = deckOverlayRef.current
+    if (!overlay) return
+
+    const layers = []
+
+    if (filters.trees && heatmapData.treePoints.length > 0) {
+      layers.push(
+        new HeatmapLayer<TreePoint>({
+          id: 'trees',
+          data: heatmapData.treePoints,
+          getPosition: d => d.position,
+          getWeight: () => 1,
+          radiusPixels: 60,
+          intensity: 1,
+          threshold: 0.03,
+          colorRange: TREE_COLOR_RANGE,
+        }),
+      )
+    }
+
+    if (filters.tempMean && heatmapData.tempPoints.length > 0) {
+      const vals = heatmapData.tempPoints.map(p => p.tmean)
+      const lo = Math.min(...vals), hi = Math.max(...vals)
+      const range = hi - lo || 1
+      layers.push(
+        new HeatmapLayer<TempPoint>({
+          id: 'tempMean',
+          data: heatmapData.tempPoints,
+          getPosition: d => d.position,
+          getWeight: d => (d.tmean - lo) / range,
+          radiusPixels: 200,
+          intensity: 1,
+          threshold: 0.03,
+          colorRange: TEMP_COLOR_RANGE,
+        }),
+      )
+    }
+
+    if (filters.tempMax && heatmapData.tempPoints.length > 0) {
+      const vals = heatmapData.tempPoints.map(p => p.tmax)
+      const lo = Math.min(...vals), hi = Math.max(...vals)
+      const range = hi - lo || 1
+      layers.push(
+        new HeatmapLayer<TempPoint>({
+          id: 'tempMax',
+          data: heatmapData.tempPoints,
+          getPosition: d => d.position,
+          getWeight: d => (d.tmax - lo) / range,
+          radiusPixels: 200,
+          intensity: 1,
+          threshold: 0.03,
+          colorRange: TEMP_COLOR_RANGE,
+        }),
+      )
+    }
+
+    overlay.setProps({ layers })
+  }, [filters, heatmapData, mapsReady])
 
   if (error) {
     return (
